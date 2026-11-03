@@ -461,6 +461,7 @@ trayEl.addEventListener("pointerdown",e=>{
   const p=e.target.closest(".piece");
   if(!p||paused||over) return;
   e.preventDefault();
+  pokeIdle();
   const i=+p.dataset.i;
   selected=-1;
   drag={slotIdx:i,cells:tray[i].cells,color:tray[i].color,moved:false,ar:0,ac:0};
@@ -501,6 +502,7 @@ boardEl.addEventListener("pointerdown",e=>{
   const t=e.target.closest(".cell");
   if(!t) return;
   e.preventDefault();
+  pokeIdle();
   const tr=+t.dataset.r, tc=+t.dataset.c;
   const slot=tray[selected];
   // forgiving anchor: try every offset where tapped cell maps to a piece cell
