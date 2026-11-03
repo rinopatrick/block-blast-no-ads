@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cute">
+<head>
+<meta charset="UTF-8">
+<!--
+  ============================================================
+  PERSONALIZE ME — one-edit swap (V1 placeholder values below):
+    1. NICKNAME: search "princess" → replace with her name
+    2. CUTE COLORS: edit --cute-* variables in :root below
+  ============================================================
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#c4b5fd">
+<title>💖 Princess Blast — no ads, just fun</title>
+<style>
+:root{
+  --cute-bg1:#f5f3ff; --cute-bg2:#ede9fe; --cute-grid:#ffffff;
+  --cute-cell:#ede9fe; --cute-cell-border:#c4b5fd;
+  --cute-accent:#9333ea; --cute-accent2:#7c3aed; --cute-text:#4c1d95;
+  --cute-tray:#ffffff;
+  --classic-bg1:#0f172a; --classic-bg2:#1e293b; --classic-grid:#1e293b;
+  --classic-cell:#334155; --classic-cell-border:#475569;
+  --classic-accent:#f59e0b; --classic-accent2:#3b82f6; --classic-text:#f1f5f9;
+  --classic-tray:#0f172a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overscroll-behavior:none}
+body{
+  font-family:ui-rounded,system-ui,-apple-system,"Segoe UI",sans-serif;
+  display:flex;flex-direction:column;align-items:center;
+  min-height:100dvh;user-select:none;-webkit-user-select:none;
+  touch-action:manipulation;transition:background .3s;
+}
+html[data-theme="cute"] body{background:linear-gradient(160deg,var(--cute-bg1),var(--cute-bg2));color:var(--cute-text)}
+html[data-theme="classic"] body{background:linear-gradient(160deg,var(--classic-bg1),var(--classic-bg2));color:var(--classic-text)}
+#app{width:100%;max-width:430px;padding:calc(8px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;flex:1}
+header{display:flex;align-items:center;justify-content:space-between;gap:6px}
+h1{font-size:1.25rem;margin:0;white-space:nowrap}
+html[data-theme="classic"] h1{font-size:1.15rem}
+.icon-btns{display:flex;gap:6px}
+button.icon{
+  border:2px solid transparent;border-radius:12px;width:38px;height:38px;font-size:1.1rem;
+  cursor:pointer;background:rgba(255,255,255,.7);
+}
+html[data-theme="classic"] button.icon{background:#334155;color:#f1f5f9}
+button.icon.off{opacity:.45;filter:grayscale(1)}
+#scorebar{display:flex;gap:8px}
+.score-card{flex:1;text-align:center;border-radius:14px;padding:6px;background:rgba(255,255,255,.75);box-shadow:0 2px 8px rgba(236,72,153,.15)}
+html[data-theme="classic"] .score-card{background:#1e293b;box-shadow:none;border:1px solid #475569}
+.score-card small{display:block;font-size:.65rem;opacity:.7;text-transform:uppercase;letter-spacing:.08em}
+.score-card b{font-size:1.3rem}
+#newbest{font-size:.7rem;color:#ec4899;font-weight:700;min-height:1em}
+#board-wrap{position:relative;width:100%}
+#board{
+  display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
+  gap:4px;padding:8px;border-radius:16px;aspect-ratio:1/1;width:100%;
+  touch-action:none;position:relative;
+}
+html[data-theme="cute"] #board{background:var(--cute-grid);box-shadow:0 6px 24px color-mix(in srgb,var(--cute-accent2) 25%,transparent)}
+html[data-theme="classic"] #board{background:#0b1120;border:1px solid #475569}
+.cell{border-radius:6px;aspect-ratio:1/1;transition:transform .08s,background .12s}
+html[data-theme="cute"] .cell{background:var(--cute-cell);border:1px solid var(--cute-cell-border)}
+html[data-theme="classic"] .cell{background:var(--classic-cell);border:1px solid var(--classic-cell-border)}
+.cell.filled{border:none;box-shadow:inset -2px -2px 0 rgba(0,0,0,.18),inset 2px 2px 0 rgba(255,255,255,.35)}
+.cell.ghost-ok{outline:2px solid #22c55e;outline-offset:-2px;filter:brightness(1.15)}
+.cell.ghost-bad{outline:2px solid #ef4444;outline-offset:-2px}
+.cell.hint-glow{outline:3px solid #fbbf24;outline-offset:-3px;animation:hintPulse 1s ease-in-out infinite}
+@keyframes hintPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.55)}}
+.cell.clearing{animation:pop .35s ease}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.25);filter:brightness(1.6)}100%{transform:scale(0)}}
+.cell.drop-in{animation:drop .18s ease}
+@keyframes drop{from{transform:scale(1.3)}to{transform:scale(1)}}
+#tray{
+  display:flex;justify-content:space-around;align-items:center;gap:6px;
+  border-radius:16px;padding:10px 6px;min-height:96px;touch-action:none;
+}
+html[data-theme="cute"] #tray{background:var(--cute-tray);box-shadow:0 4px 16px color-mix(in srgb,var(--cute-accent2) 20%,transparent)}
+html[data-theme="classic"] #tray{background:var(--classic-tray);border:1px solid #475569}
+.tray-slot{flex:1;display:flex;align-items:center;justify-content:center;min-height:84px;border-radius:12px}
+.tray-slot.selected{outline:3px dashed #ec4899;outline-offset:2px}
+.piece{display:grid;gap:3px;touch-action:none;cursor:grab}
+.piece .pcell{width:22px;height:22px;border-radius:5px;box-shadow:inset -2px -2px 0 rgba(0,0,0,.18),inset 2px 2px 0 rgba(255,255,255,.35)}
+.piece.used{visibility:hidden}
+#drag-layer{position:fixed;left:0;top:0;pointer-events:none;z-index:50;opacity:.92;display:none}
+#drag-layer .pcell{width:30px;height:30px}
+#combo-pop{
+  position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.5);
+  font-size:2rem;font-weight:900;opacity:0;pointer-events:none;z-index:40;white-space:nowrap;
+  text-shadow:0 2px 12px rgba(236,72,153,.5);
+}
+#combo-pop.show{animation:comboPop 1s ease forwards}
+@keyframes comboPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.5)}25%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}60%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-80%) scale(1)}}
+.particle{position:fixed;pointer-events:none;z-index:60;font-size:1.2rem;animation:floatUp .9s ease-out forwards}
+@keyframes floatUp{to{transform:translateY(-70px) rotate(20deg);opacity:0}}
+.overlay{
+  position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55);z-index:100;padding:20px;
+}
+.overlay.show{display:flex}
+.card{background:#fff;border-radius:20px;padding:28px;text-align:center;max-width:320px;width:100%;color:#831843;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.card h2{margin:0 0 6px}
+.card .big{font-size:2.6rem;font-weight:900;color:#ec4899}
+.card p{margin:6px 0;color:#a21caf}
+.card button{
+  margin-top:12px;border:none;border-radius:14px;padding:12px 28px;font-size:1.1rem;font-weight:700;
+  background:linear-gradient(135deg,#ec4899,#8b5cf6);color:#fff;cursor:pointer;width:100%;
+}
+.card button:active{transform:scale(.96)}
+footer{text-align:center;font-size:.7rem;opacity:.6}
+#hint{font-size:.72rem;text-align:center;opacity:.65;min-height:1.2em}
+/* personalization (issue 01): purple-led cute accents; classic theme below untouched */
+html[data-theme="cute"] #newbest{color:var(--cute-accent)}
+html[data-theme="cute"] .tray-slot.selected{outline-color:var(--cute-accent)}
+html[data-theme="cute"] .score-card{box-shadow:0 2px 8px color-mix(in srgb,var(--cute-accent) 15%,transparent)}
+html[data-theme="cute"] #combo-pop{text-shadow:0 2px 12px color-mix(in srgb,var(--cute-accent) 50%,transparent)}
+html[data-theme="cute"] .card .big{color:var(--cute-accent)}
+html[data-theme="cute"] .card p{color:var(--cute-text)}
+html[data-theme="cute"] .card button{background:linear-gradient(135deg,var(--cute-accent),var(--cute-accent2))}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1 id="title">💖 Princess Blast</h1>
+    <div class="icon-btns">
+      <button class="icon" id="btn-theme" title="Theme">🎀</button>
+      <button class="icon" id="btn-sound" title="Sound">🔊</button>
+      <button class="icon" id="btn-vib" title="Vibration">📳</button>
+      <button class="icon" id="btn-pause" title="Pause">⏸️</button>
+      <button class="icon" id="btn-restart" title="Restart">🔄</button>
+    </div>
+  </header>
+  <div id="scorebar">
+    <div class="score-card"><small>Score</small><b id="score">0</b></div>
+    <div class="score-card"><small>Best 👑</small><b id="best">0</b></div>
+  </div>
+  <div id="newbest"></div>
+  <div id="board-wrap">
+    <div id="board" aria-label="game board"></div>
+    <div id="combo-pop"></div>
+  </div>
+  <div id="hint">drag a piece onto the board ✨ or tap piece → tap board</div>
+  <div id="tray" aria-label="piece tray"></div>
+  <footer>no ads · no trackers · made with 💖</footer>
+</div>
+<div id="drag-layer"></div>
+<div class="overlay" id="ov-pause"><div class="card"><h2>⏸️ Paused</h2><p>take a breath, princess 💕</p><button id="btn-resume">Resume</button></div></div>
+<div class="overlay" id="ov-over">
+  <div class="card"><h2 id="over-emoji">💖 Game Over!</h2>
+    <div class="big" id="final-score">0</div>
+    <p>best: <b id="final-best">0</b></p><p id="over-msg"></p>
+    <button id="btn-again">Play Again 💕</button>
+  </div>
+</div>
+<script>
+"use strict";
+/* ============ PURE GAME LOGIC (no DOM/audio/storage) ============ */
+const N = 8;
+// [cells, weight] — cells are [r,c] offsets
+const SHAPES = [
+  {cells:[[0,0]],w:6},{cells:[[0,0],[0,1]],w:6},{cells:[[0,0],[1,0]],w:6},
+  {cells:[[0,0],[0,1],[0,2]],w:6},{cells:[[0,0],[1,0],[2,0]],w:6},
+  {cells:[[0,0],[0,1],[0,2],[0,3]],w:5},{cells:[[0,0],[1,0],[2,0],[3,0]],w:5},
+  {cells:[[0,0],[0,1],[0,2],[0,3],[0,4]],w:3},{cells:[[0,0],[1,0],[2,0],[3,0],[4,0]],w:3},
+  {cells:[[0,0],[0,1],[1,0],[1,1]],w:7},
+  {cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],w:2},
+  {cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],w:4},{cells:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],w:4},
+  {cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]].filter((_,i)=>i%3!==2),w:4},
+  {cells:[[0,0],[1,0],[1,1]],w:5},{cells:[[0,0],[0,1],[1,0]],w:5},
+  {cells:[[0,1],[1,0],[1,1]],w:5},{cells:[[0,0],[0,1],[1,1]],w:5},
+  {cells:[[0,0],[1,0],[2,0],[2,1]],w:4},{cells:[[0,0],[0,1],[0,2],[1,0]],w:4},
+  {cells:[[0,0],[0,1],[0,2],[1,2]],w:4},{cells:[[0,1],[1,1],[2,1],[2,0]],w:4},
+  {cells:[[0,0],[0,1],[1,1],[1,2]],w:3},{cells:[[0,1],[0,2],[1,0],[1,1]],w:3},
+  {cells:[[0,0],[1,0],[1,1],[2,1]],w:3},{cells:[[0,1],[1,0],[1,1],[2,0]],w:3},
+  {cells:[[0,0],[0,1],[0,2],[1,1]],w:4},{cells:[[0,1],[1,0],[1,1],[1,2]],w:4},
+  {cells:[[0,1],[1,0],[1,1],[2,1]],w:4},{cells:[[0,0],[1,0],[1,1],[2,0]],w:3},
+  {cells:[[0,0],[0,1],[0,2],[0,3],[0,4],[1,0],[1,1],[1,2],[1,3],[1,4]],w:1},
+];
+const TOTAL_W = SHAPES.reduce((s,x)=>s+x.w,0);
+function pickShape(rnd){
+  let r = rnd()*TOTAL_W, i = 0;
+  while(i < SHAPES.length-1 && (r -= SHAPES[i].w) >= 0) i++;
+  return SHAPES[i].cells;
+}
+const emptyBoard = () => Array.from({length:N},()=>Array(N).fill(0));
+function fits(board, cells, ar, ac){
+  for(const [r,c] of cells){
+    const rr=ar+r, cc=ac+c;
+    if(rr<0||rr>=N||cc<0||cc>=N||board[rr][cc]) return false;
+  }
+  return true;
+}
+function fitsAnywhere(board, cells){
+  const maxR=Math.max(...cells.map(c=>c[0])), maxC=Math.max(...cells.map(c=>c[1]));
+  for(let r=0;r<=N-1-maxR;r++) for(let c=0;c<=N-1-maxC;c++) if(fits(board,cells,r,c)) return true;
+  return false;
+}
+function fullLines(board){
+  const rows=[], cols=[];
+  for(let r=0;r<N;r++) if(board[r].every(v=>v)) rows.push(r);
+  for(let c=0;c<N;c++){ let full=true; for(let r=0;r<N;r++) if(!board[r][c]){full=false;break;} if(full) cols.push(c); }
+  return {rows, cols};
+}
+// transition: returns {cellsPlaced, clearedCells:[...], lines, gameOverAfter}
+function applyPlacement(board, cells, ar, ac, color){
+  for(const [r,c] of cells) board[ar+r][ac+c]=color;
+  const {rows, cols} = fullLines(board);
+  const cleared=[];
+  for(const r of rows) for(let c=0;c<N;c++) cleared.push([r,c]);
+  for(const c of cols) for(let r=0;r<N;r++) if(!rows.includes(r)) cleared.push([r,c]);
+  for(const [r,c] of cleared) board[r][c]=0;
+  return {cellsPlaced:cells.length, clearedCells:cleared, lines:rows.length+cols.length};
+}
+/* ============ ADAPTERS (DOM/audio/storage) ============ */
+const $ = id => document.getElementById(id);
+const CUTE_COLORS = ["#a855f7","#6d28d9","#fbbf24","#34d399","#60a5fa","#9333ea","#7c3aed"];
+const CLASSIC_COLORS = ["#f59e0b","#3b82f6","#22c55e","#ef4444","#a855f7","#06b6d4","#f97316"];
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:JSON.parse(v);}catch{return d;} },
+  set(k,v){ try{localStorage.setItem(k,JSON.stringify(v));}catch{} }
+};
+let board, tray, score, best, streak, selected=-1, paused=false, over=false;
+let soundOn, vibOn, theme;
+let audioCtx=null;
+const OSC_TYPES=["sine","triangle","square","sawtooth"];
+function tone(freq, dur, delay=0, type="sine", vol=.18){
+  type = OSC_TYPES.includes(type) ? type : "sine";
+  if(!soundOn) return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const t = audioCtx.currentTime + delay;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type=type; o.frequency.value=freq;
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.001,t+dur);
+    o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+dur+.02);
+  }catch{}
+}
+const sfx = {
+  select(){ tone(500,.07,"triangle",.08); },
+  place(){ tone(420,.1); tone(630,.12,.06); },
+  clear(n){ for(let i=0;i<Math.min(n,5);i++) tone(520+i*140,.14,i*.07); },
+  combo(s){ for(let i=0;i<3;i++) tone(660+i*180+s*40,.12,i*.06,"triangle"); },
+  bad(){ tone(180,.15,"sawtooth",.08); },
+  over(){ tone(400,.25); tone(300,.25,.22); tone(200,.4,.44); }
+};
+const ENCOURAGE_CUTE=["Sweet!","Nice!","Amazing!","So good!","Brilliant!","Lovely!","Super!"];
+const ENCOURAGE_CLASSIC=["Nice!","Great!","Excellent!","Brilliant!","Superb!","Well played!"];
+function pickEncourage(){ const a=theme==="cute"?ENCOURAGE_CUTE:ENCOURAGE_CLASSIC; return a[Math.floor(Math.random()*a.length)]; }
+let idleTimer=null;
+const HINT_DEFAULT="drag a piece onto the board or tap piece then tap board";
+function clearHint(){
+  const glows=document.querySelectorAll(".cell.hint-glow");
+  for(const e of glows) e.classList.remove("hint-glow");
+  const h=$("hint"); if(h&&h.dataset.hint==="1"){ h.textContent=HINT_DEFAULT; h.dataset.hint=""; }
+}
+function pokeIdle(){
+  clearTimeout(idleTimer); clearHint();
+  idleTimer=setTimeout(()=>{
+    if(paused||over||drag) return pokeIdle();
+    const slot=tray.find(t=>t&&!t.used&&fitsAnywhere(board,t.cells));
+    if(!slot) return;
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      if(fits(board,slot.cells,r,c)){
+        slot.cells.forEach(([dr,dc])=>cellAt(r+dr,c+dc).classList.add("hint-glow"));
+        const h=$("hint"); h.textContent="psst - this one fits here"; h.dataset.hint="1";
+        setTimeout(()=>{ clearHint(); pokeIdle(); },4000);
+        return;
+      }
+    }
+  },7000);
+}
+function buzz(p){ if(vibOn && navigator.vibrate) try{navigator.vibrate(p);}catch{} }
+function palette(){ return theme==="cute"?CUTE_COLORS:CLASSIC_COLORS; }
+function shapeBounds(cells){
+  return {h:Math.max(...cells.map(c=>c[0]))+1, w:Math.max(...cells.map(c=>c[1]))+1};
+}
+/* ---- render ---- */
+const boardEl=$("board"), trayEl=$("tray");
+const cellEls=[];
+for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+  const d=document.createElement("div"); d.className="cell"; d.dataset.r=r; d.dataset.c=c;
+  boardEl.appendChild(d); cellEls.push(d);
+}
+const cellAt=(r,c)=>cellEls[r*N+c];
+function renderBoard(dropCells){
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    const el=cellAt(r,c), v=board[r][c];
+    el.className="cell"+(v?" filled":"");
+    if(v) el.style.background=palette()[(v-1)%palette().length];
+    else el.style.background="";
+    if(dropCells && dropCells.some(([dr,dc])=>dr===r&&dc===c)) el.classList.add("drop-in");
+  }
+  $("score").textContent=score; $("best").textContent=best;
+}
+function renderTray(){
+  trayEl.innerHTML="";
+  tray.forEach((slot,i)=>{
+    const s=document.createElement("div");
+    s.className="tray-slot"+(selected===i?" selected":"");
+    if(slot && !slot.used){
+      const p=document.createElement("div");
+      p.className="piece"; p.dataset.i=i;
+      const {h,w}=shapeBounds(slot.cells);
+      const px = h>4?13 : h>3?17 : 22;
+      p.style.gridTemplateColumns=`repeat(${w},${px}px)`;
+      p.style.gap = px<22?"2px":"3px";
+      const grid=Array.from({length:h},()=>Array(w).fill(0));
+      slot.cells.forEach(([r,c])=>grid[r][c]=1);
+      grid.forEach(row=>row.forEach(v=>{
+        const d=document.createElement("div");
+        d.className="pcell"; d.style.width=d.style.height=px+"px";
+        if(v){ d.style.background=palette()[(slot.color-1)%palette().length]; }
+        else { d.style.background="transparent"; d.style.boxShadow="none"; }
+        p.appendChild(d);
+      }));
+      s.appendChild(p);
+    }
+    trayEl.appendChild(s);
+  });
+}
+function showCombo(text, emoji){
+  const el=$("combo-pop");
+  el.textContent=(emoji||"")+" "+text;
+  el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+}
+function particles(cells, big){
+  const pal=palette();
+  cells.forEach(([r,c],idx)=>{
+    const from=cellAt(r,c).getBoundingClientRect();
+    const n = big?2:1;
+    for(let k=0;k<n;k++){
+      const s=document.createElement("div");
+      s.className="particle";
+      s.textContent = theme==="cute" ? ["💖","✨","⭐","💕"][Math.floor(Math.random()*4)] : "✦";
+      if(theme!=="cute") s.style.color=pal[Math.floor(Math.random()*pal.length)];
+      s.style.left=(from.left+from.width/2+ (Math.random()*20-10))+"px";
+      s.style.top=(from.top+from.height/2)+"px";
+      document.body.appendChild(s);
+      setTimeout(()=>s.remove(),950);
+    }
+  });
+}
+/* ---- game flow ---- */
+function newBatch(){
+  tray=[0,1,2].map(()=>({cells:pickShape(Math.random), color:1+Math.floor(Math.random()*7), used:false}));
+}
+function checkGameOver(){
+  const avail=tray.filter(t=>t&&!t.used);
+  if(avail.length===0) return false;
+  return !avail.some(t=>fitsAnywhere(board,t.cells));
+}
+function endCheck(){
+  if(tray.every(t=>!t||t.used)) newBatch();
+  renderTray();
+  if(checkGameOver()){
+    over=true;
+    clearTimeout(idleTimer); clearHint();
+    const isBest = score>best;
+    if(isBest){ best=score; store.set("bb_best",best); }
+    renderBoard();
+    setTimeout(()=>{
+      $("final-score").textContent=score;
+      $("final-best").textContent=best;
+      $("over-msg").textContent = isBest ? "🎉 new best, princess! 🎉" : (theme==="cute"?"so close, princess! one more? 💕":"");
+      $("over-emoji").textContent = theme==="cute"?"💖 Game Over!":"Game Over";
+      $("ov-over").classList.add("show");
+      sfx.over(); buzz([100,50,100]);
+    },450);
+  }
+}
+function doPlace(slotIdx, ar, ac){
+  const slot=tray[slotIdx];
+  if(!slot||slot.used||paused||over) return false;
+  if(!fits(board,slot.cells,ar,ac)){ sfx.bad(); return false; }
+  const res=applyPlacement(board,slot.cells,ar,ac,slot.color);
+  slot.used=true; selected=-1;
+  let gained=res.cellsPlaced;
+  if(res.lines>0){
+    gained += res.clearedCells.length*10;
+    if(res.lines>1) gained += (res.lines-1)*50;
+    streak++;
+    if(streak>=2){ gained += streak*20; }
+  } else streak=0;
+  score+=gained;
+  // strict combo: streak builds only on consecutive clearing placements, dry placement resets
+  const boardCleared=res.lines>0&&board.every(row=>row.every(v=>!v));
+  if(res.clearedCells.length){
+    res.clearedCells.forEach(([r,c])=>cellAt(r,c).classList.add("clearing"));
+    particles(res.clearedCells, true);
+    if(boardCleared){
+      sfx.clear(5); sfx.combo(streak+3);
+      showCombo(theme==="cute"?"Board Clear!":"BOARD CLEAR!", "star");
+      buzz([50,50,50,50,80]);
+    } else {
+      sfx.clear(res.lines);
+      if(streak>=2){ sfx.combo(streak); showCombo("Combo x"+streak+"!", theme==="cute"?"heart":"fire"); }
+      else if(res.lines>1) showCombo(res.lines+" lines!", "spark");
+      else showCombo(pickEncourage(), theme==="cute"?"heart":"");
+      buzz(res.lines>1?[30,40,30]:25);
+    }
+  } else { sfx.place(); buzz(10); }
+  if(score>best){ best=score; store.set("bb_best",best); $("newbest").textContent="🎉 new best!"; }
+  if(res.clearedCells.length) setTimeout(()=>{ renderBoard(); endCheck(); }, 180);
+  else { renderBoard(slot.cells.map(([r,c])=>[ar+r,ac+c])); endCheck(); }
+  renderTray();
+  pokeIdle();
+  return true;
+}
+function reset(){
+  board=emptyBoard(); score=0; streak=0; selected=-1; paused=false; over=false;
+  clearTimeout(idleTimer); clearHint();
+  $("newbest").textContent="";
+  $("ov-over").classList.remove("show"); $("ov-pause").classList.remove("show");
+  newBatch(); renderBoard(); renderTray(); pokeIdle();
+}
+/* ---- input: drag + tap fallback ---- */
+const dragLayer=$("drag-layer");
+let drag=null; // {slotIdx, cells, color, moved, pid}
+function boardAnchorFromPoint(clientX, clientY, cells){
+  const rect=boardEl.getBoundingClientRect();
+  const cellW=rect.width/N;
+  const {h,w}=shapeBounds(cells);
+  // lift piece above finger so it's visible
+  const lift = cellW*2.2;
+  const cx=clientX-rect.left, cy=(clientY-lift)-rect.top;
+  const ar=Math.round(cy/cellW - h/2), ac=Math.round(cx/cellW - w/2);
+  return {ar,ac};
+}
+function paintGhost(ar,ac,cells){
+  document.querySelectorAll(".cell.ghost-ok,.cell.ghost-bad").forEach(e=>e.classList.remove("ghost-ok","ghost-bad"));
+  const ok=fits(board,cells,ar,ac);
+  cells.forEach(([r,c])=>{
+    const rr=ar+r,cc=ac+c;
+    if(rr>=0&&rr<N&&cc>=0&&cc<N) cellAt(rr,cc).classList.add(ok?"ghost-ok":"ghost-bad");
+  });
+  return ok;
+}
+function clearGhost(){ document.querySelectorAll(".cell.ghost-ok,.cell.ghost-bad").forEach(e=>e.classList.remove("ghost-ok","ghost-bad")); }
+function mountDragGhost(slot){
+  dragLayer.innerHTML="";
+  const {h,w}=shapeBounds(slot.cells);
+  dragLayer.style.display="block";
+  dragLayer.style.gridTemplateColumns=`repeat(${w},30px)`;
+  dragLayer.style.display="grid"; dragLayer.style.gap="3px";
+  const grid=Array.from({length:h},()=>Array(w).fill(0));
+  slot.cells.forEach(([r,c])=>grid[r][c]=1);
+  grid.forEach(row=>row.forEach(v=>{
+    const d=document.createElement("div");
+    d.className="pcell";
+    if(v){ d.style.background=palette()[(slot.color-1)%palette().length]; }
+    else { d.style.background="transparent"; d.style.boxShadow="none"; }
+    dragLayer.appendChild(d);
+  }));
+}
+trayEl.addEventListener("pointerdown",e=>{
+  const p=e.target.closest(".piece");
+  if(!p||paused||over) return;
+  e.preventDefault();
+  const i=+p.dataset.i;
+  selected=-1;
+  drag={slotIdx:i,cells:tray[i].cells,color:tray[i].color,moved:false,ar:0,ac:0};
+  mountDragGhost(tray[i]);
+  try{trayEl.setPointerCapture(e.pointerId);}catch{}
+  sfx.select();
+});
+trayEl.addEventListener("pointermove",e=>{
+  if(!drag) return;
+  drag.moved=true;
+  dragLayer.style.left=(e.clientX-40)+"px";
+  dragLayer.style.top=(e.clientY-110)+"px";
+  const {ar,ac}=boardAnchorFromPoint(e.clientX,e.clientY,drag.cells);
+  drag.ar=ar; drag.ac=ac;
+  paintGhost(ar,ac,drag.cells);
+});
+function endDrag(e){
+  if(!drag) return;
+  const d=drag; drag=null;
+  dragLayer.style.display="none";
+  clearGhost();
+  if(d.moved){
+    const ok=fits(board,d.cells,d.ar,d.ac);
+    if(ok) doPlace(d.slotIdx,d.ar,d.ac);
+    else { // treat as tap-select if released over tray
+      selected=d.slotIdx; renderTray(); sfx.select();
+    }
+  } else {
+    // simple tap: select / deselect
+    selected = selected===d.slotIdx ? -1 : d.slotIdx;
+    renderTray(); sfx.select();
+  }
+}
+trayEl.addEventListener("pointerup",endDrag);
+trayEl.addEventListener("pointercancel",()=>{drag=null;dragLayer.style.display="none";clearGhost();});
+boardEl.addEventListener("pointerdown",e=>{
+  if(selected<0||paused||over) return;
+  const t=e.target.closest(".cell");
+  if(!t) return;
+  e.preventDefault();
+  const tr=+t.dataset.r, tc=+t.dataset.c;
+  const slot=tray[selected];
+  // forgiving anchor: try every offset where tapped cell maps to a piece cell
+  for(const [pr,pc] of slot.cells){
+    const ar=tr-pr, ac=tc-pc;
+    if(fits(board,slot.cells,ar,ac)){ doPlace(selected,ar,ac); return; }
+  }
+  sfx.bad(); buzz(40);
+  // flash invalid
+  t.classList.add("ghost-bad"); setTimeout(()=>t.classList.remove("ghost-bad"),250);
+});
+/* ---- header buttons ---- */
+function applyTheme(){
+  document.documentElement.dataset.theme=theme;
+  $("title").textContent = theme==="cute" ? "💖 Princess Blast" : "🧱 Block Blast";
+  $("btn-theme").textContent = theme==="cute" ? "🎀" : "🧱";
+  store.set("bb_theme",theme);
+  renderBoard(); renderTray();
+}
+$("btn-theme").onclick=()=>{ theme=theme==="cute"?"classic":"cute"; applyTheme(); sfx.select(); };
+$("btn-sound").onclick=e=>{ soundOn=!soundOn; store.set("bb_sound",soundOn); e.target.classList.toggle("off",!soundOn); e.target.textContent=soundOn?"🔊":"🔇"; if(soundOn) sfx.select(); };
+$("btn-vib").onclick=e=>{ vibOn=!vibOn; store.set("bb_vib",vibOn); e.target.classList.toggle("off",!vibOn); if(vibOn) buzz(20); };
+$("btn-pause").onclick=()=>{ if(over) return; paused=true; clearTimeout(idleTimer); clearHint(); $("ov-pause").classList.add("show"); };
+$("btn-resume").onclick=()=>{ paused=false; $("ov-pause").classList.remove("show"); pokeIdle(); };
+$("btn-restart").onclick=()=>{ reset(); sfx.select(); };
+$("btn-again").onclick=()=>{ reset(); sfx.select(); };
+document.addEventListener("pointerdown",()=>{ if(audioCtx&&audioCtx.state==="suspended") audioCtx.resume(); },{passive:true});
+// block double-tap zoom / scroll fights
+document.addEventListener("touchmove",e=>{ if(e.target.closest("#board,#tray")) e.preventDefault(); },{passive:false});
+document.addEventListener("gesturestart",e=>e.preventDefault());
+/* ---- init ---- */
+theme=store.get("bb_theme","cute");
+soundOn=store.get("bb_sound",true);
+vibOn=store.get("bb_vib",true);
+best=store.get("bb_best",0);
+$("btn-sound").classList.toggle("off",!soundOn); $("btn-sound").textContent=soundOn?"🔊":"🔇";
+$("btn-vib").classList.toggle("off",!vibOn);
+reset();
+applyTheme();
+$("best").textContent=best;
+</script>
+</body>
+</html>
