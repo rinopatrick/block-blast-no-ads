@@ -211,6 +211,21 @@ function applyPlacement(board, cells, ar, ac, color){
   for(const [r,c] of cleared) board[r][c]=0;
   return {cellsPlaced:cells.length, clearedCells:cleared, lines:rows.length+cols.length};
 }
+// issue 03 conformance seam: tray/game-over/streak/scoring rules, all pure
+function trayIsEmpty(tray){ return tray.every(t=>!t||t.used); }
+function gameOverFor(board, tray){
+  const avail=tray.filter(t=>t&&!t.used);
+  if(avail.length===0) return false; // empty tray refills first, never game over
+  return !avail.some(t=>fitsAnywhere(board,t.cells));
+}
+function advanceStreak(streak, lines){ return lines>0 ? streak+1 : 0; }
+function gainFor(cellsPlaced, clearedCount, lines, streakAfter){
+  let g=cellsPlaced+clearedCount*10;
+  if(lines>1) g+=(lines-1)*50;
+  if(streakAfter>=2) g+=streakAfter*20;
+  return g;
+}
+function isNewBest(score, best){ return score>best; }
 /* ============ ADAPTERS (DOM/audio/storage) ============ */
 const $ = id => document.getElementById(id);
 const CUTE_COLORS = ["#a855f7","#6d28d9","#fbbf24","#34d399","#60a5fa","#9333ea","#7c3aed"];
@@ -344,18 +359,14 @@ function particles(cells, big){
 function newBatch(){
   tray=[0,1,2].map(()=>({cells:pickShape(Math.random), color:1+Math.floor(Math.random()*7), used:false}));
 }
-function checkGameOver(){
-  const avail=tray.filter(t=>t&&!t.used);
-  if(avail.length===0) return false;
-  return !avail.some(t=>fitsAnywhere(board,t.cells));
-}
+function checkGameOver(){ return gameOverFor(board, tray); }
 function endCheck(){
-  if(tray.every(t=>!t||t.used)) newBatch();
+  if(trayIsEmpty(tray)) newBatch();
   renderTray();
   if(checkGameOver()){
     over=true;
     clearTimeout(idleTimer); clearHint();
-    const isBest = score>best;
+    const isBest = isNewBest(score, best);
     if(isBest){ best=score; store.set("bb_best",best); }
     renderBoard();
     setTimeout(()=>{
@@ -374,14 +385,8 @@ function doPlace(slotIdx, ar, ac){
   if(!fits(board,slot.cells,ar,ac)){ sfx.bad(); return false; }
   const res=applyPlacement(board,slot.cells,ar,ac,slot.color);
   slot.used=true; selected=-1;
-  let gained=res.cellsPlaced;
-  if(res.lines>0){
-    gained += res.clearedCells.length*10;
-    if(res.lines>1) gained += (res.lines-1)*50;
-    streak++;
-    if(streak>=2){ gained += streak*20; }
-  } else streak=0;
-  score+=gained;
+  streak = advanceStreak(streak, res.lines);
+  score += gainFor(res.cellsPlaced, res.clearedCells.length, res.lines, streak);
   // strict combo: streak builds only on consecutive clearing placements, dry placement resets
   const boardCleared=res.lines>0&&board.every(row=>row.every(v=>!v));
   if(res.clearedCells.length){
@@ -399,7 +404,7 @@ function doPlace(slotIdx, ar, ac){
       buzz(res.lines>1?[30,40,30]:25);
     }
   } else { sfx.place(); buzz(10); }
-  if(score>best){ best=score; store.set("bb_best",best); $("newbest").textContent="🎉 new best!"; }
+  if(isNewBest(score,best)){ best=score; store.set("bb_best",best); $("newbest").textContent="🎉 new best!"; }
   if(res.clearedCells.length) setTimeout(()=>{ renderBoard(); endCheck(); }, 180);
   else { renderBoard(slot.cells.map(([r,c])=>[ar+r,ac+c])); endCheck(); }
   renderTray();
