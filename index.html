@@ -65,10 +65,10 @@ html[data-theme="classic"] .cell{background:var(--classic-cell);border:1px solid
 .cell.ghost-ok{outline:2px solid #22c55e;outline-offset:-2px;filter:brightness(1.15)}
 .cell.ghost-bad{outline:2px solid #ef4444;outline-offset:-2px}
 .cell.hint-glow{outline:3px solid #fbbf24;outline-offset:-3px;animation:hintPulse 1s ease-in-out infinite}
-@keyframes hintPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.55)}}
-.cell.clearing{animation:pop .35s ease}
-@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.25);filter:brightness(1.6)}100%{transform:scale(0)}}
-.cell.drop-in{animation:drop .18s ease}
+@keyframes hintPulse{0%,100%{opacity:1}50%{opacity:.55}}
+.cell.clearing{animation:pop .18s ease}
+@keyframes pop{0%{transform:scale(1);opacity:1}40%{transform:scale(1.25);opacity:1}100%{transform:scale(0);opacity:0}}
+.cell.drop-in{animation:drop .15s ease}
 @keyframes drop{from{transform:scale(1.3)}to{transform:scale(1)}}
 #tray{
   display:flex;justify-content:space-around;align-items:center;gap:6px;
@@ -88,9 +88,10 @@ html[data-theme="classic"] #tray{background:var(--classic-tray);border:1px solid
   font-size:2rem;font-weight:900;opacity:0;pointer-events:none;z-index:40;white-space:nowrap;
   text-shadow:0 2px 12px rgba(236,72,153,.5);
 }
-#combo-pop.show{animation:comboPop 1s ease forwards}
+#combo-pop.show{animation:comboPop .9s ease forwards}
 @keyframes comboPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.5)}25%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}60%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-80%) scale(1)}}
-.particle{position:fixed;pointer-events:none;z-index:60;font-size:1.2rem;animation:floatUp .9s ease-out forwards}
+.particle{position:fixed;pointer-events:none;z-index:60;font-size:1.2rem;animation:floatUp .8s ease-out forwards;will-change:transform,opacity}
+html[data-theme="classic"] .particle{text-shadow:0 0 8px currentColor,0 0 2px currentColor}
 @keyframes floatUp{to{transform:translateY(-70px) rotate(20deg);opacity:0}}
 .overlay{
   position:fixed;inset:0;display:none;align-items:center;justify-content:center;
@@ -226,6 +227,68 @@ function gainFor(cellsPlaced, clearedCount, lines, streakAfter){
   return g;
 }
 function isNewBest(score, best){ return score>best; }
+// ---- issue 05 juice policy: pure caps + plans, no DOM/audio/storage ----
+// CLEAR_MS/DROP_MS small so 180ms render matches SFX gap (doPlace), never block next placement.
+// 60fps: CSS anims touch transform/opacity only (pop/drop/comboPop/floatUp).
+// Sounds: triangle/sine, <=0.15 vol, >=60ms stagger -> never clip or stack harshly.
+const JUICE = {
+  CLEAR_MS: 180,      // .cell.clearing pop; render/endCheck wait this long
+  DROP_MS: 150,       // .cell.drop-in
+  COMBO_MS: 900,      // combo-pop hold (matches CSS comboPop .9s)
+  PARTICLE_MAX: 18,   // hard cap so particles read without obscuring board
+  PARTICLE_PER_CELL: 1,
+  PARTICLE_PER_CELL_BIG: 2,
+  VOICES_MAX: 5,      // stacked tones cap -> no clipping
+  VOICE_WINDOW_MS: 600, // overlapping tones inside this window count as live
+  STAGGER_MIN: 0.06,  // min delay gap between stacked tones (seconds)
+  TONE_VOL: 0.15,     // unit voice ceiling
+  COMBO_AT: 2         // streak >= this fires combo callout + arpeggio
+};
+// live voice ledger: timestamps (ms) of tones already scheduled inside the window
+let liveVoices=[];
+function voiceRoom(now){
+  liveVoices=liveVoices.filter(t=>now-t<JUICE.VOICE_WINDOW_MS);
+  return Math.max(0, JUICE.VOICES_MAX-liveVoices.length);
+}
+function claimVoices(plan, now){
+  const room=voiceRoom(now);
+  const take=plan.slice(0, room);
+  for(const t of take) liveVoices.push(now+t.delay*1000);
+  return take;
+}
+// total particle elements for a clear (capped); cute/classic themes share the cap
+function particleCountFor(clearedCount, big){
+  if(clearedCount<=0) return 0;
+  return Math.min(JUICE.PARTICLE_MAX, clearedCount*(big?JUICE.PARTICLE_PER_CELL_BIG:JUICE.PARTICLE_PER_CELL));
+}
+// which cleared cells spawn a particle (evenly sampled when capped)
+function pickParticleCells(clearedCells, count){
+  if(clearedCells.length<=count) return clearedCells.slice();
+  const out=[];
+  for(let i=0;i<count;i++) out.push(clearedCells[Math.floor(i*clearedCells.length/count)]);
+  return out;
+}
+// exactly one callout kind per clear, board-clear wins so callouts never double-fire
+// returns: 'board-clear' | 'combo' | 'multi' | 'encourage' | null
+function calloutKindFor({lines, streakAfter, boardCleared, clearedCount}){
+  if(!clearedCount) return null;
+  if(boardCleared) return 'board-clear';
+  if(streakAfter>=JUICE.COMBO_AT) return 'combo';
+  if(lines>1) return 'multi';
+  return 'encourage';
+}
+// exact oscillator plan for one placement (pure: no AudioContext touched)
+function soundPlanFor({lines, streakAfter, boardCleared}){
+  const V=JUICE.TONE_VOL;
+  if(boardCleared) return [523,659,784,1047].map((f,i)=>({freq:f,dur:.16,delay:+(i*.09).toFixed(2),type:'triangle',vol:.14}));
+  if(streakAfter>=JUICE.COMBO_AT) return [0,1,2].map(i=>({freq:660+i*180+(streakAfter-JUICE.COMBO_AT)*40,dur:.12,delay:+(i*.06).toFixed(2),type:'triangle',vol:.14}));
+  if(lines>0){
+    const plan=[{freq:520,dur:.14,delay:0,type:'sine',vol:V}];
+    for(let i=1;i<lines&&plan.length<JUICE.VOICES_MAX;i++) plan.push({freq:520+i*140,dur:.14,delay:+(i*.07).toFixed(2),type:'sine',vol:V});
+    return plan;
+  }
+  return [{freq:420,dur:.1,delay:0,type:'sine',vol:V},{freq:630,dur:.12,delay:.06,type:'sine',vol:V}];
+}
 /* ============ ADAPTERS (DOM/audio/storage) ============ */
 const $ = id => document.getElementById(id);
 const CUTE_COLORS = ["#a855f7","#6d28d9","#fbbf24","#34d399","#60a5fa","#9333ea","#7c3aed"];
@@ -238,8 +301,9 @@ let board, tray, score, best, streak, selected=-1, paused=false, over=false;
 let soundOn, vibOn, theme;
 let audioCtx=null;
 const OSC_TYPES=["sine","triangle","square","sawtooth"];
-function tone(freq, dur, delay=0, type="sine", vol=.18){
+function tone(freq, dur, delay=0, type="sine", vol=JUICE.TONE_VOL){
   type = OSC_TYPES.includes(type) ? type : "sine";
+  vol = Math.min(vol, JUICE.TONE_VOL);
   if(!soundOn) return;
   try{
     audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
@@ -250,13 +314,15 @@ function tone(freq, dur, delay=0, type="sine", vol=.18){
     o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+dur+.02);
   }catch{}
 }
+function playPlan(plan, now){ if(now===undefined) now=(typeof performance!=='undefined'?performance.now():Date.now()); for(const t of claimVoices(plan, now)) tone(t.freq, t.dur, t.delay, t.type, t.vol); }
 const sfx = {
-  select(){ tone(500,.07,"triangle",.08); },
-  place(){ tone(420,.1); tone(630,.12,.06); },
-  clear(n){ for(let i=0;i<Math.min(n,5);i++) tone(520+i*140,.14,i*.07); },
-  combo(s){ for(let i=0;i<3;i++) tone(660+i*180+s*40,.12,i*.06,"triangle"); },
-  bad(){ tone(180,.15,"sawtooth",.08); },
-  over(){ tone(400,.25); tone(300,.25,.22); tone(200,.4,.44); }
+  select(){ tone(500,.07,0,"triangle",.08); },
+  place(){ playPlan(soundPlanFor({lines:0,streakAfter:0,boardCleared:false})); },
+  clear(lines){ playPlan(soundPlanFor({lines,streakAfter:0,boardCleared:false})); },
+  combo(streak){ playPlan(soundPlanFor({lines:1,streakAfter:streak,boardCleared:false})); },
+  fanfare(){ playPlan(soundPlanFor({lines:1,streakAfter:streak,boardCleared:true})); },
+  bad(){ tone(180,.15,0,"sawtooth",.08); },
+  over(){ playPlan([{freq:400,dur:.25,delay:0,type:'sine',vol:.15},{freq:300,dur:.25,delay:.22,type:'sine',vol:.15},{freq:200,dur:.4,delay:.44,type:'sine',vol:.15}]); }
 };
 const ENCOURAGE_CUTE=["Sweet!","Nice!","Amazing!","So good!","Brilliant!","Lovely!","Super!"];
 const ENCOURAGE_CLASSIC=["Nice!","Great!","Excellent!","Brilliant!","Superb!","Well played!"];
@@ -338,21 +404,22 @@ function showCombo(text, emoji){
   el.textContent=(emoji||"")+" "+text;
   el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
 }
+let liveParticles=0;
 function particles(cells, big){
   const pal=palette();
-  cells.forEach(([r,c],idx)=>{
+  const room=Math.max(0, JUICE.PARTICLE_MAX-liveParticles);
+  const spots=pickParticleCells(cells, Math.min(particleCountFor(cells.length, big), room));
+  liveParticles+=spots.length;
+  spots.forEach(([r,c])=>{
     const from=cellAt(r,c).getBoundingClientRect();
-    const n = big?2:1;
-    for(let k=0;k<n;k++){
-      const s=document.createElement("div");
-      s.className="particle";
-      s.textContent = theme==="cute" ? ["💖","✨","⭐","💕"][Math.floor(Math.random()*4)] : "✦";
-      if(theme!=="cute") s.style.color=pal[Math.floor(Math.random()*pal.length)];
-      s.style.left=(from.left+from.width/2+ (Math.random()*20-10))+"px";
-      s.style.top=(from.top+from.height/2)+"px";
-      document.body.appendChild(s);
-      setTimeout(()=>s.remove(),950);
-    }
+    const s=document.createElement("div");
+    s.className="particle";
+    s.textContent = theme==="cute" ? ["💖","✨","⭐","💕"][Math.floor(Math.random()*4)] : "✦";
+    if(theme!=="cute") s.style.color=pal[Math.floor(Math.random()*pal.length)];
+    s.style.left=(from.left+from.width/2+ (Math.random()*20-10))+"px";
+    s.style.top=(from.top+from.height/2)+"px";
+    document.body.appendChild(s);
+    setTimeout(()=>{ s.remove(); liveParticles=Math.max(0,liveParticles-1); },850);
   });
 }
 /* ---- game flow ---- */
@@ -389,23 +456,20 @@ function doPlace(slotIdx, ar, ac){
   score += gainFor(res.cellsPlaced, res.clearedCells.length, res.lines, streak);
   // strict combo: streak builds only on consecutive clearing placements, dry placement resets
   const boardCleared=res.lines>0&&board.every(row=>row.every(v=>!v));
+  const evt={lines:res.lines,streakAfter:streak,boardCleared,clearedCount:res.clearedCells.length};
   if(res.clearedCells.length){
     res.clearedCells.forEach(([r,c])=>cellAt(r,c).classList.add("clearing"));
-    particles(res.clearedCells, true);
-    if(boardCleared){
-      sfx.clear(5); sfx.combo(streak+3);
-      showCombo(theme==="cute"?"Board Clear!":"BOARD CLEAR!", "star");
-      buzz([50,50,50,50,80]);
-    } else {
-      sfx.clear(res.lines);
-      if(streak>=2){ sfx.combo(streak); showCombo("Combo x"+streak+"!", theme==="cute"?"heart":"fire"); }
-      else if(res.lines>1) showCombo(res.lines+" lines!", "spark");
-      else showCombo(pickEncourage(), theme==="cute"?"heart":"");
-      buzz(res.lines>1?[30,40,30]:25);
+    particles(res.clearedCells, res.lines>1||boardCleared);
+    playPlan(soundPlanFor(evt)); // one plan per clear: never clips or stacks harshly
+    switch(calloutKindFor(evt)){ // exactly one callout per clear: never double-fires
+      case 'board-clear': showCombo(theme==="cute"?"Board Clear!":"BOARD CLEAR!", theme==="cute"?"star":"spark"); buzz([50,50,50,50,80]); break;
+      case 'combo': showCombo("Combo x"+streak+"!", theme==="cute"?"heart":"fire"); buzz([30,40,30]); break;
+      case 'multi': showCombo(res.lines+" lines!", "spark"); buzz([30,40,30]); break;
+      case 'encourage': showCombo(pickEncourage(), theme==="cute"?"heart":"spark"); buzz(25); break;
     }
   } else { sfx.place(); buzz(10); }
   if(isNewBest(score,best)){ best=score; store.set("bb_best",best); $("newbest").textContent="🎉 new best!"; }
-  if(res.clearedCells.length) setTimeout(()=>{ renderBoard(); endCheck(); }, 180);
+  if(res.clearedCells.length) setTimeout(()=>{ renderBoard(); endCheck(); }, JUICE.CLEAR_MS);
   else { renderBoard(slot.cells.map(([r,c])=>[ar+r,ac+c])); endCheck(); }
   renderTray();
   pokeIdle();
