@@ -242,7 +242,8 @@ const JUICE = {
   VOICE_WINDOW_MS: 600, // overlapping tones inside this window count as live
   STAGGER_MIN: 0.06,  // min delay gap between stacked tones (seconds)
   TONE_VOL: 0.15,     // unit voice ceiling
-  COMBO_AT: 2         // streak >= this fires combo callout + arpeggio
+  COMBO_AT: 2,        // streak >= this fires combo callout + arpeggio
+  ENCOURAGE_MS: 1500 // min gap between 'encourage' callouts: no spam on rapid small clears
 };
 // live voice ledger: timestamps (ms) of tones already scheduled inside the window
 let liveVoices=[];
@@ -250,16 +251,23 @@ function voiceRoom(now){
   liveVoices=liveVoices.filter(t=>now-t<JUICE.VOICE_WINDOW_MS);
   return Math.max(0, JUICE.VOICES_MAX-liveVoices.length);
 }
+// Steal guarantee: a nonempty plan always returns >=1 voice.
+// Window full -> drop the oldest live voice and hand its slot to the new plan's head.
 function claimVoices(plan, now){
-  const room=voiceRoom(now);
+  if(!plan.length) return [];
+  let room=voiceRoom(now);
+  if(room===0){ liveVoices.sort((a,b)=>a-b); liveVoices.shift(); room=1; }
   const take=plan.slice(0, room);
   for(const t of take) liveVoices.push(now+t.delay*1000);
   return take;
 }
+// encouragement throttle: last timestamp an 'encourage' callout fired (adapter sets it)
+let lastEncourageAt=-Infinity;
+function encourageDue(now){ return now-lastEncourageAt>=JUICE.ENCOURAGE_MS; }
 // total particle elements for a clear (capped); cute/classic themes share the cap
-function particleCountFor(clearedCount, big){
+function particleCountFor(clearedCount, isBigClear){
   if(clearedCount<=0) return 0;
-  return Math.min(JUICE.PARTICLE_MAX, clearedCount*(big?JUICE.PARTICLE_PER_CELL_BIG:JUICE.PARTICLE_PER_CELL));
+  return Math.min(JUICE.PARTICLE_MAX, clearedCount*(isBigClear?JUICE.PARTICLE_PER_CELL_BIG:JUICE.PARTICLE_PER_CELL));
 }
 // which cleared cells spawn a particle (evenly sampled when capped)
 function pickParticleCells(clearedCells, count){
@@ -405,10 +413,10 @@ function showCombo(text, emoji){
   el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
 }
 let liveParticles=0;
-function particles(cells, big){
+function particles(cells, isBigClear){
   const pal=palette();
   const room=Math.max(0, JUICE.PARTICLE_MAX-liveParticles);
-  const spots=pickParticleCells(cells, Math.min(particleCountFor(cells.length, big), room));
+  const spots=pickParticleCells(cells, Math.min(particleCountFor(cells.length, isBigClear), room));
   liveParticles+=spots.length;
   spots.forEach(([r,c])=>{
     const from=cellAt(r,c).getBoundingClientRect();
@@ -461,11 +469,12 @@ function doPlace(slotIdx, ar, ac){
     res.clearedCells.forEach(([r,c])=>cellAt(r,c).classList.add("clearing"));
     particles(res.clearedCells, res.lines>1||boardCleared);
     playPlan(soundPlanFor(evt)); // one plan per clear: never clips or stacks harshly
+    const now=(typeof performance!=='undefined'?performance.now():Date.now());
     switch(calloutKindFor(evt)){ // exactly one callout per clear: never double-fires
       case 'board-clear': showCombo(theme==="cute"?"Board Clear!":"BOARD CLEAR!", theme==="cute"?"star":"spark"); buzz([50,50,50,50,80]); break;
       case 'combo': showCombo("Combo x"+streak+"!", theme==="cute"?"heart":"fire"); buzz([30,40,30]); break;
       case 'multi': showCombo(res.lines+" lines!", "spark"); buzz([30,40,30]); break;
-      case 'encourage': showCombo(pickEncourage(), theme==="cute"?"heart":"spark"); buzz(25); break;
+      case 'encourage': if(encourageDue(now)){ lastEncourageAt=now; showCombo(pickEncourage(), theme==="cute"?"heart":"spark"); buzz(25); } break;
     }
   } else { sfx.place(); buzz(10); }
   if(isNewBest(score,best)){ best=score; store.set("bb_best",best); $("newbest").textContent="🎉 new best!"; }

@@ -14,7 +14,7 @@ const src = html.slice(html.indexOf('const N = 8;'), html.indexOf('/* ==========
 assert.ok(src.includes('function fits('), 'pure-logic seam missing from index.html');
 const box = {};
 vm.createContext(box);
-vm.runInContext(src + '\nthis.__api = { JUICE, particleCountFor, pickParticleCells, calloutKindFor, soundPlanFor, voiceRoom, claimVoices };', box);
+vm.runInContext(src + '\nthis.__api = { JUICE, particleCountFor, pickParticleCells, calloutKindFor, soundPlanFor, voiceRoom, claimVoices, encourageDue };', box);
 // clone vm-realm objects into host realm (deepStrictEqual checks prototypes)
 const raw = box.__api;
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -26,6 +26,7 @@ const api = {
   soundPlanFor: (...a) => clone(raw.soundPlanFor(...a)),
   voiceRoom: (...a) => raw.voiceRoom(...a),
   claimVoices: (...a) => clone(raw.claimVoices(...a)),
+  encourageDue: (...a) => raw.encourageDue(...a),
 };
 
 test('JUICE caps: anims never block placement, density/voices bounded', () => {
@@ -103,7 +104,32 @@ test('soundPlanFor: exact hand-computed plans for place/clear/combo/fanfare', ()
   );
 });
 
-test('voice ledger: rapid placements share one VOICES_MAX window, stale voices expire', () => {
+test('voice ledger: second clear steals oldest voice instead of going silent', () => {
+  const full = [
+    { freq: 520, delay: 0 },
+    { freq: 660, delay: 0.07 },
+    { freq: 800, delay: 0.14 },
+    { freq: 940, delay: 0.21 },
+    { freq: 1080, delay: 0.28 },
+  ];
+  assert.equal(api.claimVoices(full, 0).length, 5);
+  // window full 100ms later: steal oldest, never return empty for a nonempty plan
+  const stolen = api.claimVoices(full, 100);
+  assert.ok(stolen.length >= 1, 'a clear must always make sound');
+  assert.equal(stolen.length, 1);
+  assert.deepEqual(api.claimVoices([], 150), []); // empty plan stays empty
+});
+
+test('encourage throttle: rapid single-line clears do not spam callouts', () => {
+  const t0 = 1e9; // far-future base: isolated from other tests sharing the ledger
+  assert.equal(api.encourageDue(t0), true);
+  vm.runInContext('lastEncourageAt = ' + t0 + ';', box); // adapter records the firing
+  assert.equal(api.encourageDue(t0 + 500), false); // 500ms later: suppressed
+  assert.equal(api.encourageDue(t0 + 2000), true); // gap passed: fires again
+});
+
+test('voice ledger: overlapping tones share one VOICES_MAX window, stale voices expire', () => {
+  const t0 = 2e9; // far-future base: isolated from other tests sharing the ledger
   const full = [
     { freq: 520, dur: 0.14, delay: 0 },
     { freq: 660, dur: 0.14, delay: 0.07 },
@@ -111,11 +137,11 @@ test('voice ledger: rapid placements share one VOICES_MAX window, stale voices e
     { freq: 940, dur: 0.14, delay: 0.21 },
     { freq: 1080, dur: 0.14, delay: 0.28 },
   ];
-  assert.equal(api.claimVoices(full, 0).length, 5);
-  assert.equal(api.voiceRoom(100), 0); // window still full 100ms later
-  assert.deepEqual(api.claimVoices(full, 100), []); // second rapid clear gets nothing: no stack
-  assert.equal(api.voiceRoom(900), 5); // window expired: room again
-  assert.equal(api.claimVoices(full.slice(0, 2), 900).length, 2);
+  assert.equal(api.claimVoices(full, t0).length, 5);
+  assert.equal(api.voiceRoom(t0 + 100), 0); // window still full 100ms later
+  // steal path covered above; here the ledger caps overlap without stacking
+  assert.equal(api.voiceRoom(t0 + 900), 5); // window expired: room again
+  assert.equal(api.claimVoices(full.slice(0, 2), t0 + 900).length, 2);
 });
 
 test('soundPlanFor: every plan capped, staggered, and quiet enough to never clip', () => {
